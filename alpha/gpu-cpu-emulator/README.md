@@ -65,6 +65,10 @@ cd build
 cmake --build .
 ./gpuemu
 ```
+8 vCPU test:
+```
+./build/gpuemu -p 4 guest/parallel.o
+```
 
 This boots a **minimal bare-metal Linux userland** guest (`guest/minlinux.S`) that simulates:
 
