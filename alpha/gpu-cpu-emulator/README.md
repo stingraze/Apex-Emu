@@ -69,6 +69,75 @@ cmake --build .
 ```
 ./build/gpuemu -p 8 guest/parallel.o
 ```
+And its output (in text)
+```
+GPU x86-64 Emulator — Compiled C Guest
+======================================
+Loading compiled guest: build/guest/println.o
+vCPUs: 8
+
+Backend: CUDA GPU | entry=0x10017b | IR ops=151
+
+=== println guest (compiled C) ====== println guest (compiled C) ====== println guest (compiled C) ====== println guest (compiled C) ====== println guest (compiled C) ====== println guest (compiled C) ====== println guest (compiled C) ====== println guest (compiled C) ===
+
+
+
+
+
+
+
+a = 17, b = 25a = 17, b = 25a = 17, b = 25a = 17, b = 25a = 17, b = 25a = 17, b = 25a = 17, b = 25a = 17, b = 25
+
+
+
+
+
+
+
+a + b =a + b =a + b =a + b =a + b =a + b =a + b =a + b =
+
+
+
+
+
+
+
+42
+
+
+
+
+
+
+
+a * b (loop) =a * b (loop) =a * b (loop) =a * b (loop) =a * b (loop) =a * b (loop) =a * b (loop) =a * b (loop) =
+
+
+
+
+
+
+
+425
+
+
+
+
+
+
+
+Done.Done.Done.Done.Done.Done.Done.Done.
+
+
+
+
+
+
+
+
+--- 8 guest(s) finished (exit_code=42, halted=1) ---
+
+```
 
 This boots a **minimal bare-metal Linux userland** guest (`guest/minlinux.S`) that simulates:
 
