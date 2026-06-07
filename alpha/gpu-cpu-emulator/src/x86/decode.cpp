@@ -88,6 +88,9 @@ bool Decoder::parse_modrm(Operand& op, Width w, uint8_t rex, uint8_t modrm) {
         op.disp = 0;
         op.has_sib = true;
         if (!parse_sib(op, rex, mod)) return false;
+        if (mod == 0) {
+            return true;
+        }
     } else if (rm == 5 && mod == 0) {
         op.rip_rel = true;
         op.disp = static_cast<int32_t>(fetch32());
@@ -187,7 +190,7 @@ bool Decoder::decode_one(Instruction& out) {
     // JMP rel8
     if (b0 == 0xEB) {
         out.kind = OpKind::Jmp;
-        out.target = pc_ + static_cast<int8_t>(fetch8());
+        out.target = pc_ + 2 + static_cast<int8_t>(fetch8());
         out.size = pos_ - start;
         pc_ += out.size;
         return true;
@@ -196,7 +199,7 @@ bool Decoder::decode_one(Instruction& out) {
     // JMP rel32: E9
     if (b0 == 0xE9) {
         out.kind = OpKind::Jmp;
-        out.target = pc_ + static_cast<int32_t>(fetch32());
+        out.target = pc_ + 5 + static_cast<int32_t>(fetch32());
         out.size = pos_ - start;
         pc_ += out.size;
         return true;

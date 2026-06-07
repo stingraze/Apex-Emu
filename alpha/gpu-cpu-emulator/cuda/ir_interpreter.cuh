@@ -178,7 +178,10 @@ GPUEMU_DEVICE GPUEMU_FORCE_INLINE int exec_ir(x86::CpuState& cpu, uint8_t* mem,
                                                const ir::Instr* code, uint32_t code_len,
                                                uint32_t& pc, uint32_t max_steps) {
     for (uint32_t step = 0; step < max_steps; ++step) {
-        if (pc >= code_len) return 1;
+        if (pc >= code_len) {
+            cpu.halt = 1;
+            return 1;
+        }
         const ir::Instr& ins = code[pc++];
 
         switch (ins.op) {
@@ -206,6 +209,10 @@ GPUEMU_DEVICE GPUEMU_FORCE_INLINE int exec_ir(x86::CpuState& cpu, uint8_t* mem,
                     val &= 0xFF;
                 } else if (ins.aux == 5) {
                     val = static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(val)));
+                } else if (ins.width == 4) {
+                    val = static_cast<uint32_t>(val);
+                } else if (ins.width == 2) {
+                    val = static_cast<uint16_t>(val);
                 }
                 cpu.gpr[ins.dst] = val;
                 break;

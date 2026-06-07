@@ -82,8 +82,10 @@ bool Emulator::load_guest(const char* path, uint64_t& entry_out) {
 uint32_t Emulator::add_vcpu(uint64_t entry_pc, const x86::CpuState* initial) {
     auto vc = std::make_unique<virt::VirtualCpu>(mem_, entry_pc);
     if (initial) {
+        const uint64_t rsp = vc->state().gpr[static_cast<int>(x86::Reg::RSP)];
         vc->state() = *initial;
         vc->state().rip = entry_pc;
+        vc->state().gpr[static_cast<int>(x86::Reg::RSP)] = rsp;
     }
     vcpus_.push_back(std::move(vc));
     return static_cast<uint32_t>(vcpus_.size() - 1);

@@ -74,6 +74,7 @@ set(GUEST_CFLAGS -nostdlib -fno-pic -fno-stack-protector -fcf-protection=none
                  -fno-asynchronous-unwind-tables -O0)
 set(SIMPLE_OBJ ${CMAKE_BINARY_DIR}/guest/simple.o)
 set(PARALLEL_OBJ ${CMAKE_BINARY_DIR}/guest/parallel.o)
+set(PRINTLN_OBJ ${CMAKE_BINARY_DIR}/guest/println.o)
 set(DEMO_OBJ ${CMAKE_BINARY_DIR}/guest/demo.o)
 
 if(GCC_EXECUTABLE)
@@ -94,6 +95,14 @@ if(GCC_EXECUTABLE)
         COMMENT "Compiling guest/parallel.c to parallel.o"
     )
     add_custom_command(
+        OUTPUT ${PRINTLN_OBJ}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/guest
+        COMMAND ${GCC_EXECUTABLE} -c ${GUEST_CFLAGS}
+                ${CMAKE_SOURCE_DIR}/guest/println.c -o ${PRINTLN_OBJ}
+        DEPENDS ${CMAKE_SOURCE_DIR}/guest/println.c
+        COMMENT "Compiling guest/println.c to println.o"
+    )
+    add_custom_command(
         OUTPUT ${DEMO_OBJ}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/guest
         COMMAND ${GCC_EXECUTABLE} -c ${GUEST_CFLAGS}
@@ -101,7 +110,7 @@ if(GCC_EXECUTABLE)
         DEPENDS ${CMAKE_SOURCE_DIR}/guest/demo.c
         COMMENT "Compiling guest/demo.c to demo.o"
     )
-    add_custom_target(guest_objects ALL DEPENDS ${SIMPLE_OBJ} ${PARALLEL_OBJ} ${DEMO_OBJ})
+    add_custom_target(guest_objects ALL DEPENDS ${SIMPLE_OBJ} ${PARALLEL_OBJ} ${PRINTLN_OBJ} ${DEMO_OBJ})
 endif()
 
 if(GAS_EXECUTABLE AND LD_EXECUTABLE)
@@ -137,7 +146,7 @@ endif()
 
 if(TARGET guest_objects)
     add_dependencies(gpuemu guest_objects)
-    target_compile_definitions(gpuemu PRIVATE SIMPLE_OBJ_DEFAULT="${SIMPLE_OBJ}")
+    target_compile_definitions(gpuemu PRIVATE SIMPLE_OBJ_DEFAULT="${PRINTLN_OBJ}")
 endif()
 
 # Allow CPU executor to include the CUDA header without nvcc

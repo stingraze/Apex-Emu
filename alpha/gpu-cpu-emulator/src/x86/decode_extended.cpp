@@ -16,25 +16,25 @@ bool Decoder::decode_0f(uint8_t b1, uint8_t rex, bool in_rex, Instruction& out, 
     if ((b1 & 0xF0) == 0x80) {
         out.kind = OpKind::Jcc;
         out.cc = b1 & 0xF;
-        out.target = pc_ + static_cast<int32_t>(fetch32());
+        out.target = pc_ + 6 + static_cast<int32_t>(fetch32());
         return finish();
     }
     if (b1 == 0x85) {
         out.kind = OpKind::Jcc;
         out.cc = 5;
-        out.target = pc_ + static_cast<int32_t>(fetch32());
+        out.target = pc_ + 6 + static_cast<int32_t>(fetch32());
         return finish();
     }
     if (b1 == 0xB6) {
         out.kind = OpKind::MovRegMem;
         out.dst.is_mem = false;
-        out.dst.width = Width::D;
+        out.dst.width = (in_rex && (rex & 8)) ? Width::Q : Width::D;
         out.src.is_mem = true;
         out.src.width = Width::B;
         out.zext = true;
         if (!need(1)) return false;
         uint8_t modrm = fetch8();
-        out.dst.reg = decode_reg((modrm >> 3) & 7, Width::D, rex, false);
+        out.dst.reg = decode_reg((modrm >> 3) & 7, out.dst.width, rex, false);
         parse_modrm(out.src, Width::B, rex, modrm);
         return finish();
     }
@@ -151,6 +151,25 @@ bool Decoder::decode_extended(uint8_t b0, uint8_t rex, bool in_rex, Width w, Ins
         uint8_t modrm = fetch8();
         out.dst.reg = decode_reg((modrm >> 3) & 7, Width::Q, rex, false);
         parse_modrm(out.src, Width::D, rex, modrm);
+        return finish();
+    }
+
+    // FF /0 INC, FF /1 DEC
+    if (b0 == 0xFF) {
+        if (!need(1)) return false;
+        uint8_t modrm = fetch8();
+        const uint8_t op = (modrm >> 3) & 7;
+        if (op > 1) return false;
+        out.binop = (op == 0) ? BinOp::Add : BinOp::Sub;
+        out.dst.is_mem = true;
+        out.dst.width = w;
+        parse_modrm(out.dst, w, rex, modrm);
+        out.src.imm = 1;
+        if (!out.dst.is_mem) {
+            out.kind = OpKind::BinOpRegImm;
+        } else {
+            out.kind = OpKind::BinOpMemImm;
+        }
         return finish();
     }
 

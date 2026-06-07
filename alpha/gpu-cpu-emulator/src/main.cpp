@@ -45,7 +45,7 @@ static void print_usage(const char* prog) {
     printf("Options:\n");
     printf("  -p N, --parallel N   Run N vCPUs in parallel (default: 1)\n");
     printf("  -h, --help           Show this help\n\n");
-    printf("Default guest: build/guest/simple.o (compiled from guest/simple.c)\n");
+    printf("Default guest: build/guest/println.o (compiled from guest/println.c)\n");
 }
 
 int main(int argc, char** argv) {
