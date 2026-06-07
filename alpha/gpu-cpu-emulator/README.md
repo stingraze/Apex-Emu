@@ -58,13 +58,6 @@ cmake --build . -j
 
 Without CUDA, the emulator runs on CPU using the same IR interpreter.
 
-### Run the Linux / BusyBox demo
-
-```bash
-cd build
-cmake --build .
-./gpuemu
-```
 8 vCPU test (from ~/alpha/gpu-cpu-emulator):
 ```
 ./build/gpuemu -p 8 guest/parallel.o
@@ -137,6 +130,15 @@ Done.Done.Done.Done.Done.Done.Done.Done.
 
 --- 8 guest(s) finished (exit_code=42, halted=1) ---
 
+```
+
+
+### Run the Linux / BusyBox demo
+
+```bash
+cd build
+cmake --build .
+./gpuemu
 ```
 
 This boots a **minimal bare-metal Linux userland** guest (`guest/minlinux.S`) that simulates:
