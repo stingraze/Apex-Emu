@@ -65,7 +65,7 @@ cd build
 cmake --build .
 ./gpuemu
 ```
-8 vCPU test:
+8 vCPU test (from ~/alpha/gpu-cpu-emulator):
 ```
 ./build/gpuemu -p 8 guest/parallel.o
 ```
