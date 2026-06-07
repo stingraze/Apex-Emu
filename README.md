@@ -1,6 +1,8 @@
 # Apex-Emu
 A CUDA-accelerated x86-64 (long mode) emulator with a virtualization layer that translates guest instructions into GPU-friendly IR for parallel execution.
 
+[![Watch the video](https://www.youtube.com/watch?v=Lq-4HTcQ1jg)](https://www.youtube.com/watch?v=Lq-4HTcQ1jg)
+
 Simple C programs (for x86 64bit CPU) were tested to run on A10 GPU with 24GB of VRAM. 
 Still under test, eventually, I want to run a whole simple Linux / UNIX type OS on GPU.
 
