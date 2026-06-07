@@ -1,7 +1,7 @@
 # Apex-Emu
-A experimental CPU emulator on GPU
+An experimental CPU emulator on GPU.
 
-Simple C programs were tested to run on A10 GPU with 24GB of VRAM. 
+Simple C programs (for x86 64bit CPU) were tested to run on A10 GPU with 24GB of VRAM. 
 Still under test, eventually, I want to run a whole simple Linux / UNIX type OS on GPU.
 
 Created using Cursor.
