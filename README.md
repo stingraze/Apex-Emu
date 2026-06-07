@@ -1,7 +1,7 @@
 # Apex-Emu
 A CUDA-accelerated x86-64 (long mode) emulator with a virtualization layer that translates guest instructions into GPU-friendly IR for parallel execution.
 
-<video src='https://www.youtube.com/watch?v=Lq-4HTcQ1jg' width=180/>
+[<img src="https://img.youtube.com/vi/Lq-4HTcQ1jg/maxresdefault.jpg" width="50%">](https://youtu.be/Lq-4HTcQ1jg)
 
 [![Watch the video](https://www.youtube.com/watch?v=Lq-4HTcQ1jg)](https://www.youtube.com/watch?v=Lq-4HTcQ1jg)
 
