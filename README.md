@@ -1,2 +1,2 @@
 # Apex-Emu
-A experimental CPU emualator on GPU
+A experimental CPU emulator on GPU
