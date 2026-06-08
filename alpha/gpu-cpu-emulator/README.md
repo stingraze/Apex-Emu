@@ -181,6 +181,72 @@ src/              Host implementation
 cuda/             GPU IR interpreter + CUDA kernels
 ```
 
+How it works today
+CMake compiles every file under guest/ with gcc (-nostdlib -O0, etc.) into build/guest/*.o:
+
+Guest	Object	How to run
+parallel.c
+parallel.o
+```
+./build/gpuemu --guest parallel -p 4
+simple.c
+simple.o
+./build/gpuemu --guest simple
+```
+println.c
+println.o
+```
+./build/gpuemu (default)
+```
+
+demo.c
+demo.o
+```
+./build/gpuemu --guest demo
+```
+
+mandel.c
+mandel.o
+```
+./build/gpuemu --mandel -p 8
+```
+gpubench.S
+gpubench.o
+```
+./build/gpuemu --bench -p 1024
+```
+
+You can also pass any .o path directly:
+
+```
+./build/gpuemu build/guest/parallel.o -p 4
+```
+Important: -p / --parallel means number of vCPUs, not “run parallel.c”. That’s why it felt like only --mandel was wired up — mandel is the only guest with a dedicated mode; the rest use the generic loader.
+
+New CLI helpers
+Added:
+```
+--list-guests — shows all built-in guests and example commands
+--guest NAME — picks a guest by name (parallel, simple, println, demo, mandel, gpubench)
+cmake --build build
+./build/gpuemu --list-guests
+./build/gpuemu --guest parallel -p 4
+./build/gpuemu --mandel -p 8
+Adding your own guest .c
+```
+
+Put guest/myprog.c in the repo with a _start() entry (same pattern as simple.c / parallel.c).
+Add a add_custom_command block in CMakeLists.txt (copy the parallel.o rule).
+Append it to GUEST_OBJ_LIST.
+Run it: ./build/gpuemu build/guest/myprog.o -p N
+Or extend the kGuests[] table in main.cpp if you want a --guest myprog alias.
+
+Why mandel “just works” but println is flaky
+--mandel uses extra host setup: row bands in RCX/RDX, per-vCPU memory snapshots, and ASCII framebuffer printing.
+Generic guests (run_guest) only set RDI = vcpu_id and run. That’s enough for parallel.c and simple.c (inline asm + syscalls).
+println.c / demo.c use C stack locals and division loops for number printing — those hit known IR decoder gaps (same class of bugs we worked around in mandelbrot). Mandelbrot works because it avoids those patterns.
+So: parallel and simple work now; println/demo need more IR support (or asm-style syscalls like parallel.c) before they’re reliable.
+
 ## Extending
 
 - **More instructions**: Add cases to `Decoder::decode_one` and `Translator::emit_x86`.
