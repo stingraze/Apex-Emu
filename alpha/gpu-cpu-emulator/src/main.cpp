@@ -11,9 +11,27 @@ extern "C" const char* gpuemu_cuda_device_name();
 #endif
 
 #ifdef SIMPLE_OBJ_DEFAULT
-static const char* default_guest_obj() { return SIMPLE_OBJ_DEFAULT; }
+static const char* default_simple_obj() { return SIMPLE_OBJ_DEFAULT; }
 #else
-static const char* default_guest_obj() { return "guest/simple.o"; }
+static const char* default_simple_obj() { return "build/guest/simple.o"; }
+#endif
+
+#ifdef PARALLEL_OBJ_DEFAULT
+static const char* default_parallel_obj() { return PARALLEL_OBJ_DEFAULT; }
+#else
+static const char* default_parallel_obj() { return "build/guest/parallel.o"; }
+#endif
+
+#ifdef PRINTLN_OBJ_DEFAULT
+static const char* default_guest_obj() { return PRINTLN_OBJ_DEFAULT; }
+#else
+static const char* default_guest_obj() { return "build/guest/println.o"; }
+#endif
+
+#ifdef DEMO_OBJ_DEFAULT
+static const char* default_demo_obj() { return DEMO_OBJ_DEFAULT; }
+#else
+static const char* default_demo_obj() { return "build/guest/demo.o"; }
 #endif
 
 #ifdef GPUBENCH_OBJ_DEFAULT
@@ -305,18 +323,76 @@ static void run_showcase(uint32_t num_vcpus, const char* obj_path, uint32_t max_
     printf("  each with its own registers and memory — launched like a CUDA kernel.\n\n");
 }
 
+enum class GuestKind { Generic, Mandel, Bench };
+
+struct GuestEntry {
+    const char* name;
+    const char* (*path_fn)();
+    GuestKind kind;
+    const char* description;
+};
+
+static const GuestEntry kGuests[] = {
+    {"simple", default_simple_obj, GuestKind::Generic,
+     "Hello world + exit(42)"},
+    {"parallel", default_parallel_obj, GuestKind::Generic,
+     "One write syscall per vCPU; use -p N for parallel launch"},
+    {"println", default_guest_obj, GuestKind::Generic,
+     "Arithmetic demo with println() helpers"},
+    {"demo", default_demo_obj, GuestKind::Generic,
+     "Same as println with sys_write() wrapper"},
+    {"mandel", default_mandel_obj, GuestKind::Mandel,
+     "Parallel ASCII Mandelbrot (row bands per vCPU)"},
+    {"gpubench", default_bench_obj, GuestKind::Bench,
+     "CPU vs GPU integer loop benchmark"},
+};
+
+static const GuestEntry* find_guest(const char* name) {
+    for (const auto& g : kGuests) {
+        if (std::strcmp(g.name, name) == 0) {
+            return &g;
+        }
+    }
+    return nullptr;
+}
+
+static void list_guests() {
+    printf("Built-in C/asm guests (compile with: cmake --build build)\n\n");
+    printf("  Name       Mode      Description\n");
+    printf("  --------   -------   -----------\n");
+    for (const auto& g : kGuests) {
+        const char* mode = "generic";
+        if (g.kind == GuestKind::Mandel) {
+            mode = "mandel";
+        } else if (g.kind == GuestKind::Bench) {
+            mode = "bench";
+        }
+        printf("  %-10s %-9s %s\n", g.name, mode, g.description);
+    }
+    printf("\nRun examples:\n");
+    printf("  ./build/gpuemu --guest parallel -p 4\n");
+    printf("  ./build/gpuemu --guest simple\n");
+    printf("  ./build/gpuemu --mandel -p 8\n");
+    printf("  ./build/gpuemu --bench -p 1024\n");
+    printf("  ./build/gpuemu build/guest/parallel.o -p 4   # explicit .o path\n");
+}
+
 static void print_usage(const char* prog) {
     printf("Usage:\n");
     printf("  %s [options] [path/to/guest.o]\n\n", prog);
     printf("Options:\n");
-    printf("  --bench              Run CPU vs GPU showcase (default guest: gpubench.o)\n");
-    printf("  --mandel             Parallel ASCII Mandelbrot (uses build/guest/mandel.o)\n");
-    printf("  -p N, --parallel N   Run N vCPUs in parallel (default: 1, bench: 512, mandel: 8)\n");
+    printf("  --guest NAME         Run a built-in guest (see --list-guests)\n");
+    printf("  --list-guests        List built-in guests and example commands\n");
+    printf("  --bench              Run CPU vs GPU showcase (guest: gpubench)\n");
+    printf("  --mandel             Parallel ASCII Mandelbrot (guest: mandel)\n");
+    printf("  -p N, --parallel N   Number of vCPUs (default: 1; bench: 512; mandel: 8)\n");
     printf("  --steps N            Max IR steps per vCPU (mandel default: 256M)\n");
     printf("  -h, --help           Show this help\n\n");
-    printf("Showcase (needs CUDA GPU):\n");
-    printf("  %s --bench -p 1024\n", prog);
-    printf("  %s --mandel -p 8\n\n", prog);
+    printf("Examples:\n");
+    printf("  %s --guest parallel -p 4\n", prog);
+    printf("  %s --guest println\n", prog);
+    printf("  %s --mandel -p 8\n", prog);
+    printf("  %s --bench -p 1024\n\n", prog);
     printf("Default guest: build/guest/println.o\n");
 }
 
@@ -331,6 +407,38 @@ int main(int argc, char** argv) {
         if (std::strcmp(argv[i], "-h") == 0 || std::strcmp(argv[i], "--help") == 0) {
             print_usage(argv[0]);
             return 0;
+        }
+        if (std::strcmp(argv[i], "--list-guests") == 0) {
+            list_guests();
+            return 0;
+        }
+        if (std::strcmp(argv[i], "--guest") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Missing name for --guest (try --list-guests)\n");
+                return 1;
+            }
+            const char* name = argv[++i];
+            const GuestEntry* guest = find_guest(name);
+            if (!guest) {
+                fprintf(stderr, "Unknown guest '%s'. Run with --list-guests.\n", name);
+                return 1;
+            }
+            obj = guest->path_fn();
+            if (guest->kind == GuestKind::Mandel) {
+                mandel_mode = true;
+                if (num_vcpus == 1) {
+                    num_vcpus = 8;
+                }
+                if (max_steps == (64u << 20)) {
+                    max_steps = 256u << 20;
+                }
+            } else if (guest->kind == GuestKind::Bench) {
+                bench_mode = true;
+                if (num_vcpus == 1) {
+                    num_vcpus = 512;
+                }
+            }
+            continue;
         }
         if (std::strcmp(argv[i], "--bench") == 0) {
             bench_mode = true;

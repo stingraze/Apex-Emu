@@ -1,5 +1,5 @@
 // Parallel demo: host passes vCPU id in RDI. Each instance prints one line.
-// Build with the same flags as simple.c.
+// Build with the same flags as simple.c (see CMakeLists.txt guest_objects).
 
 void _start(void) {
     __asm__ volatile(
@@ -11,7 +11,7 @@ void _start(void) {
         "syscall\n"
 
         "mov $60, %%rax\n"
-        "xor %%rdi, %%rdi\n"
+        "mov $0, %%rdi\n"
         "syscall\n"
 
         "msg:\n"
