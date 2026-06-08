@@ -231,8 +231,9 @@ cmake --build build
 ./build/gpuemu --list-guests
 ./build/gpuemu --guest parallel -p 4
 ./build/gpuemu --mandel -p 8
-Adding your own guest .c
 ```
+
+Adding your own guest .c
 
 Put guest/myprog.c in the repo with a _start() entry (same pattern as simple.c / parallel.c).
 Add a add_custom_command block in CMakeLists.txt (copy the parallel.o rule).
