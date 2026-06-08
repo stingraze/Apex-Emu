@@ -55,10 +55,21 @@ public:
     virt::GuestMemory& memory() { return mem_; }
     const FlatIr& ir() const { return flat_; }
     bool using_gpu() const { return use_gpu_; }
+    void disable_gpu() { use_gpu_ = false; }
+
+    uint32_t vcpu_count() const { return static_cast<uint32_t>(vcpus_.size()); }
+
+    // Allocate CUDA executor for current vCPU count and IR. Returns false on failure.
+    bool init_gpu_backend();
 
     virt::VirtualCpu& vcpu(uint32_t idx) { return *vcpus_.at(idx); }
 
+    // Per-vCPU guest RAM snapshot after the last run() (for parallel framebuffer compositing).
+    const uint8_t* vcpu_memory(uint32_t idx) const;
+    uint64_t vcpu_memory_size() const { return mem_.size(); }
+
 private:
+    bool init_gpu();
     void run_cpu(uint32_t max_steps);
     void run_gpu(uint32_t max_steps);
     void handle_traps();
@@ -71,6 +82,7 @@ private:
     bool use_gpu_ = false;
     bool translated_ = false;
     void* cuda_handle_ = nullptr;
+    std::vector<std::vector<uint8_t>> vcpu_mem_;
 };
 
 }  // namespace gpuemu

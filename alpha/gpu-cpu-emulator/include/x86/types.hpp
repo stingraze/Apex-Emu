@@ -37,6 +37,8 @@ enum class OpKind : uint8_t {
     Nop,
     Hlt,
     Syscall,
+    ImulRegMem,
+    ShiftRegImm,
 };
 
 enum class BinOp : uint8_t { Add, Sub, And, Or, Xor };
@@ -45,6 +47,7 @@ struct Operand {
     bool is_mem = false;
     bool rip_rel = false;
     bool has_sib = false;
+    bool abs_sib = false;
     Reg reg = Reg::RAX;
     int8_t scale = 1;
     Reg index = Reg::RAX;

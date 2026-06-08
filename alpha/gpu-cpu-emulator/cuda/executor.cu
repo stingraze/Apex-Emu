@@ -1,5 +1,6 @@
 #include "cuda/ir_interpreter.cuh"
 #include <cuda_runtime.h>
+#include <cstdio>
 
 namespace gpuexec {
 
@@ -17,8 +18,9 @@ __global__ void vcpu_run_kernel(x86::CpuState* vcpus, uint32_t num_vcpus,
 
     if (cpu.halt) return;
 
-    const int status = exec_ir(cpu, guest_mem, mem_size, ir_code, ir_len, pc, steps_per_launch);
-    (void)status;
+    uint8_t* mem = guest_mem + static_cast<uint64_t>(id) * mem_size;
+    const int status = exec_ir(cpu, mem, mem_size, ir_code, ir_len, pc, steps_per_launch);
+    if (status != 0) return;
 }
 
 // Batch kernel: multiple vCPUs execute independent IR streams in parallel.
@@ -118,8 +120,18 @@ int gpuemu_cuda_available() {
     return cudaGetDeviceCount(&n) == cudaSuccess && n > 0;
 }
 
+static char g_device_name[256] = "CUDA device";
+
+const char* gpuemu_cuda_device_name() {
+    return g_device_name;
+}
+
 GpuExecutorHandle* gpuemu_cuda_create(uint32_t num_vcpus, uint64_t mem_size,
                                        const ir::Instr* ir, uint32_t ir_len) {
+    cudaDeviceProp prop{};
+    if (cudaGetDeviceProperties(&prop, 0) == cudaSuccess) {
+        std::snprintf(g_device_name, sizeof(g_device_name), "%s", prop.name);
+    }
     auto* h = new GpuExecutorHandle();
     if (h->exec.init(num_vcpus, mem_size, ir, ir_len) != cudaSuccess) {
         delete h;

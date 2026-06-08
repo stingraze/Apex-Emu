@@ -38,6 +38,44 @@ bool Decoder::decode_0f(uint8_t b1, uint8_t rex, bool in_rex, Instruction& out, 
         parse_modrm(out.src, Width::B, rex, modrm);
         return finish();
     }
+    if (b1 == 0xAF) {
+        out.kind = OpKind::ImulRegMem;
+        out.dst.is_mem = false;
+        out.src.is_mem = true;
+        out.dst.width = (in_rex && (rex & 8)) ? Width::Q : Width::D;
+        out.src.width = out.dst.width;
+        if (!need(1)) return false;
+        uint8_t modrm = fetch8();
+        out.dst.reg = decode_reg((modrm >> 3) & 7, out.dst.width, rex, false);
+        parse_modrm(out.src, out.src.width, rex, modrm);
+        return finish();
+    }
+    if (b1 == 0xBE) {
+        out.kind = OpKind::MovRegMem;
+        out.dst.is_mem = false;
+        out.dst.width = (in_rex && (rex & 8)) ? Width::Q : Width::D;
+        out.src.is_mem = true;
+        out.src.width = Width::B;
+        out.sext = true;
+        if (!need(1)) return false;
+        uint8_t modrm = fetch8();
+        out.dst.reg = decode_reg((modrm >> 3) & 7, out.dst.width, rex, false);
+        parse_modrm(out.src, Width::B, rex, modrm);
+        return finish();
+    }
+    if (b1 == 0xB6) {
+        out.kind = OpKind::MovRegMem;
+        out.dst.is_mem = false;
+        out.dst.width = (in_rex && (rex & 8)) ? Width::Q : Width::D;
+        out.src.is_mem = true;
+        out.src.width = Width::B;
+        out.zext = true;
+        if (!need(1)) return false;
+        uint8_t modrm = fetch8();
+        out.dst.reg = decode_reg((modrm >> 3) & 7, out.dst.width, rex, false);
+        parse_modrm(out.src, Width::B, rex, modrm);
+        return finish();
+    }
     (void)in_rex;
     return false;
 }
@@ -92,6 +130,19 @@ bool Decoder::decode_extended(uint8_t b0, uint8_t rex, bool in_rex, Width w, Ins
         uint8_t modrm = fetch8();
         out.src.reg = decode_reg((modrm >> 3) & 7, Width::B, rex, false);
         parse_modrm(out.dst, Width::B, rex, modrm);
+        return finish();
+    }
+
+    if (b0 == 0x8A) {
+        out.kind = OpKind::MovRegMem;
+        out.dst.is_mem = false;
+        out.dst.width = Width::B;
+        out.src.is_mem = true;
+        out.src.width = Width::B;
+        if (!need(1)) return false;
+        uint8_t modrm = fetch8();
+        out.dst.reg = decode_reg((modrm >> 3) & 7, Width::B, rex, false);
+        parse_modrm(out.src, Width::B, rex, modrm);
         return finish();
     }
 
@@ -155,6 +206,36 @@ bool Decoder::decode_extended(uint8_t b0, uint8_t rex, bool in_rex, Width w, Ins
     }
 
     // FF /0 INC, FF /1 DEC
+    if (b0 == 0xC1) {
+        if (!need(1)) return false;
+        uint8_t modrm = fetch8();
+        const uint8_t op = (modrm >> 3) & 7;
+        if (op != 4 && op != 5 && op != 7) return false;
+        out.kind = OpKind::ShiftRegImm;
+        out.dst.is_mem = true;
+        out.dst.width = w;
+        parse_modrm(out.dst, w, rex, modrm);
+        if (out.dst.is_mem) return false;
+        out.src.imm = static_cast<int8_t>(fetch8());
+        out.binop = (op == 4) ? BinOp::Add : (op == 5 ? BinOp::Sub : BinOp::Or);
+        return finish();
+    }
+
+    if (b0 == 0xD1) {
+        if (!need(1)) return false;
+        uint8_t modrm = fetch8();
+        const uint8_t op = (modrm >> 3) & 7;
+        if (op != 4 && op != 5 && op != 7) return false;
+        out.kind = OpKind::ShiftRegImm;
+        out.dst.is_mem = true;
+        out.dst.width = w;
+        parse_modrm(out.dst, w, rex, modrm);
+        if (out.dst.is_mem) return false;
+        out.src.imm = 1;
+        out.binop = (op == 4) ? BinOp::Add : (op == 5 ? BinOp::Sub : BinOp::Or);
+        return finish();
+    }
+
     if (b0 == 0xFF) {
         if (!need(1)) return false;
         uint8_t modrm = fetch8();

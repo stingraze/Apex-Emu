@@ -21,9 +21,8 @@ void encode_mem_addr(ir::Instr& i, const x86::Operand& op, uint8_t flags) {
         } else {
             i.imm = static_cast<int64_t>(op.index);
         }
-    } else {
-        i.aux = aux;
     }
+    if (op.abs_sib) aux |= 0x40;
     i.aux = aux;
 }
 
@@ -93,8 +92,12 @@ void Translator::emit_x86(const x86::Instruction& insn, ir::BasicBlock& bb) {
                 for (int s = 1; s < insn.src.scale; s <<= 1) scale_bits++;
                 i.aux = static_cast<uint8_t>(6 | (scale_bits << 4));
             }
+            if (insn.src.abs_sib) {
+                i.aux |= 0x40;
+            }
             if (insn.zext) {
-                i.aux = insn.src.has_sib ? static_cast<uint8_t>(6 | (i.aux & 0xF0)) : 4;
+                i.aux = insn.src.has_sib ? static_cast<uint8_t>((i.aux & 0xF0) | 6 | (i.aux & 0x40))
+                                         : 4;
                 i.width = 1;
             } else if (insn.sext) {
                 i.aux = 5;
@@ -263,6 +266,9 @@ void Translator::emit_x86(const x86::Instruction& insn, ir::BasicBlock& bb) {
                     for (int s = 1; s < insn.src.scale; s <<= 1) scale_bits++;
                     i.aux = static_cast<uint8_t>(6 | (scale_bits << 4));
                 }
+                if (insn.src.abs_sib) {
+                    i.aux |= 0x40;
+                }
             }
             push(i);
             break;
@@ -290,6 +296,46 @@ void Translator::emit_x86(const x86::Instruction& insn, ir::BasicBlock& bb) {
         case x86::OpKind::Syscall:
             push(make(ir::Opcode::Syscall));
             break;
+
+        case x86::OpKind::ImulRegMem: {
+            ir::Instr i = make(ir::Opcode::ImulReg);
+            i.dst = static_cast<uint8_t>(insn.dst.reg);
+            i.width = static_cast<uint8_t>(insn.dst.width);
+            if (insn.src.is_mem) {
+                i.src = static_cast<uint8_t>(insn.src.base);
+                i.disp = static_cast<uint32_t>(insn.src.disp);
+                uint8_t aux = 0x80;
+                if (insn.src.rip_rel) aux |= 1;
+                if (insn.src.has_sib) {
+                    i.imm = static_cast<int64_t>(insn.src.index);
+                    int scale_bits = 0;
+                    for (int s = 1; s < insn.src.scale; s <<= 1) scale_bits++;
+                    aux = static_cast<uint8_t>(0x80 | 6 | (scale_bits << 4));
+                }
+                if (insn.src.abs_sib) aux |= 0x40;
+                i.aux = aux;
+            } else {
+                i.src = static_cast<uint8_t>(insn.src.reg);
+            }
+            push(i);
+            break;
+        }
+
+        case x86::OpKind::ShiftRegImm: {
+            ir::Instr i = make(ir::Opcode::ShiftRegImm);
+            i.dst = static_cast<uint8_t>(insn.dst.reg);
+            i.imm = insn.src.imm & 63;
+            i.width = static_cast<uint8_t>(insn.dst.width);
+            if (insn.binop == x86::BinOp::Add) {
+                i.aux = 0;
+            } else if (insn.binop == x86::BinOp::Sub) {
+                i.aux = 1;
+            } else {
+                i.aux = 2;
+            }
+            push(i);
+            break;
+        }
 
         default:
             push(make(ir::Opcode::Hlt));

@@ -63,6 +63,7 @@ bool Decoder::parse_sib(Operand& op, uint8_t rex, uint8_t mod) {
     op.base = decode_reg(sib & 7, Width::Q, rex, true);
     if ((sib & 7) == 5 && mod == 0) {
         op.disp = static_cast<int32_t>(fetch32());
+        op.abs_sib = true;
     }
     return true;
 }
@@ -278,6 +279,27 @@ bool Decoder::decode_one(Instruction& out) {
 
     // REX-prefixed opcodes
     if (in_rex) {
+        // 48 05 imm32 ADD rax, sign-extended imm32
+        if ((rex & 8) && b0 == 0x05) {
+            out.kind = OpKind::BinOpRegImm;
+            out.binop = BinOp::Add;
+            out.dst.reg = Reg::RAX;
+            out.dst.width = Width::Q;
+            out.src.imm = static_cast<int32_t>(fetch32());
+            out.size = pos_ - start;
+            pc_ += out.size;
+            return true;
+        }
+        // 48 3D imm32 CMP rax, imm32
+        if ((rex & 8) && b0 == 0x3D) {
+            out.kind = OpKind::CmpRegImm;
+            out.dst.reg = Reg::RAX;
+            out.dst.width = Width::Q;
+            out.src.imm = static_cast<int32_t>(fetch32());
+            out.size = pos_ - start;
+            pc_ += out.size;
+            return true;
+        }
         // 48 89 /r MOV r/m64, r64
         if (b0 == 0x89) {
             out.kind = OpKind::MovMemReg;
@@ -354,6 +376,22 @@ bool Decoder::decode_one(Instruction& out) {
             uint8_t reg = (modrm >> 3) & 7;
             out.src.reg = decode_reg(reg, Width::Q, rex, false);
             parse_modrm(out.dst, Width::Q, rex, modrm);
+            out.size = pos_ - start;
+            pc_ += out.size;
+            return true;
+        }
+        // 48 33 /r XOR r64, r/m64
+        if (b0 == 0x33) {
+            out.kind = OpKind::BinOpRegReg;
+            out.binop = BinOp::Xor;
+            out.dst.is_mem = false;
+            out.src.is_mem = true;
+            out.dst.width = Width::Q;
+            if (!need(1)) return false;
+            uint8_t modrm = fetch8();
+            uint8_t reg = (modrm >> 3) & 7;
+            out.dst.reg = decode_reg(reg, Width::Q, rex, false);
+            parse_modrm(out.src, Width::Q, rex, modrm);
             out.size = pos_ - start;
             pc_ += out.size;
             return true;

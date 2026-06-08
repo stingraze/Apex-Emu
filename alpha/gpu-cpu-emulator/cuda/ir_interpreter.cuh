@@ -134,13 +134,18 @@ GPUEMU_DEVICE GPUEMU_FORCE_INLINE void update_flags(x86::CpuState& cpu, uint64_t
 
 GPUEMU_DEVICE GPUEMU_FORCE_INLINE uint64_t eff_addr(const x86::CpuState& cpu, const ir::Instr& ins,
                                                      uint8_t base_reg) {
-    uint64_t addr = cpu.gpr[base_reg] + static_cast<int32_t>(ins.disp);
+    uint64_t addr = static_cast<int32_t>(ins.disp);
     if ((ins.aux & 0xF) == 6) {
         const int scale_bits = (ins.aux >> 4) & 3;
         const uint64_t scale = 1ULL << scale_bits;
         const int idx = (ins.aux & 0x10) ? static_cast<int>(ins.src)
                                          : static_cast<int>(ins.imm);
         addr += cpu.gpr[idx] * scale;
+        if (!(ins.aux & 0x40)) {
+            addr += cpu.gpr[base_reg];
+        }
+    } else {
+        addr += cpu.gpr[base_reg];
     }
     return addr;
 }
@@ -163,10 +168,10 @@ GPUEMU_DEVICE GPUEMU_FORCE_INLINE bool eval_cc(uint8_t cc, uint64_t flags) {
         case 0x9: return !sf;                   // NS
         case 0xA: return sf != of;              // P / PE (parity approximated)
         case 0xB: return sf == of;              // NP / PO
-        case 0xC: return zf || (sf != of);      // LE / NG
-        case 0xD: return !zf && (sf == of);     // G / NLE
-        case 0xE: return sf != of;              // L / NGE
-        case 0xF: return sf == of;              // GE / NL
+        case 0xC: return sf != of;              // L / NGE (JL)
+        case 0xD: return sf == of;              // GE / NL (JNL/JGE)
+        case 0xE: return zf || (sf != of);      // LE / NG (JLE)
+        case 0xF: return !zf && (sf == of);     // G / NLE (JG)
         default:  return false;
     }
 }
@@ -189,7 +194,15 @@ GPUEMU_DEVICE GPUEMU_FORCE_INLINE int exec_ir(x86::CpuState& cpu, uint8_t* mem,
                 break;
 
             case ir::Opcode::LoadImm:
-                cpu.gpr[ins.dst] = static_cast<uint64_t>(ins.imm);
+                if (ins.width == 4) {
+                    cpu.gpr[ins.dst] = static_cast<uint32_t>(ins.imm);
+                } else if (ins.width == 2) {
+                    cpu.gpr[ins.dst] = static_cast<uint16_t>(ins.imm);
+                } else if (ins.width == 1) {
+                    cpu.gpr[ins.dst] = static_cast<uint8_t>(ins.imm);
+                } else {
+                    cpu.gpr[ins.dst] = static_cast<uint64_t>(ins.imm);
+                }
                 break;
 
             case ir::Opcode::MovReg:
@@ -381,6 +394,43 @@ GPUEMU_DEVICE GPUEMU_FORCE_INLINE int exec_ir(x86::CpuState& cpu, uint8_t* mem,
                 cpu.syscall_num = static_cast<int64_t>(cpu.gpr[0]);
                 cpu.syscall_pending = 1;
                 return 2;
+
+            case ir::Opcode::ImulReg: {
+                const int64_t lhs = static_cast<int64_t>(cpu.gpr[ins.dst]);
+                int64_t rhs;
+                if (ins.aux & 0x80) {
+                    const uint64_t addr = (ins.aux & 0xF) == 6
+                                                ? eff_addr(cpu, ins, ins.src)
+                                                : cpu.gpr[ins.src] +
+                                                      static_cast<int32_t>(ins.disp);
+                    rhs = static_cast<int64_t>(load_mem(mem, addr, ins.width, mem_size));
+                } else {
+                    rhs = static_cast<int64_t>(cpu.gpr[ins.src]);
+                }
+                const int64_t prod = lhs * rhs;
+                cpu.gpr[ins.dst] = static_cast<uint64_t>(prod) & mask_width(ins.width);
+                break;
+            }
+
+            case ir::Opcode::ShiftRegImm: {
+                const uint8_t n = static_cast<uint8_t>(ins.imm & 63);
+                if (ins.aux == 2) {
+                    int64_t v = static_cast<int64_t>(cpu.gpr[ins.dst]);
+                    if (ins.width == 4) {
+                        v = static_cast<int32_t>(v);
+                    } else if (ins.width == 2) {
+                        v = static_cast<int16_t>(v);
+                    } else if (ins.width == 1) {
+                        v = static_cast<int8_t>(v);
+                    }
+                    cpu.gpr[ins.dst] = static_cast<uint64_t>(v >> n) & mask_width(ins.width);
+                } else if (ins.aux == 1) {
+                    cpu.gpr[ins.dst] = (cpu.gpr[ins.dst] >> n) & mask_width(ins.width);
+                } else {
+                    cpu.gpr[ins.dst] = (cpu.gpr[ins.dst] << n) & mask_width(ins.width);
+                }
+                break;
+            }
 
             case ir::Opcode::Barrier:
                 break;

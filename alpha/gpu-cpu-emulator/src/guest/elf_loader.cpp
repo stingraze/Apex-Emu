@@ -123,12 +123,14 @@ LoadedImage load_elf(virt::GuestMemory& mem, const uint8_t* data, size_t len) {
         std::memcpy(mem.host_ptr() + ph[i].p_vaddr, data + ph[i].p_offset, ph[i].p_filesz);
     }
 
+    const Elf64Shdr* text_sh = nullptr;
     if (eh->e_shoff && eh->e_shnum) {
         const auto* sh = reinterpret_cast<const Elf64Shdr*>(data + eh->e_shoff);
         const auto* shstr = reinterpret_cast<const char*>(data + sh[eh->e_shstrndx].sh_offset);
         for (uint16_t i = 0; i < eh->e_shnum; ++i) {
             const char* name = shstr + sh[i].sh_name;
             if (std::strcmp(name, ".text") == 0) {
+                text_sh = &sh[i];
                 out.code_addr = sh[i].sh_addr;
                 out.code_size = static_cast<size_t>(sh[i].sh_size);
                 break;
@@ -136,7 +138,20 @@ LoadedImage load_elf(virt::GuestMemory& mem, const uint8_t* data, size_t len) {
         }
     }
 
-    if (out.code_size == 0) {
+    // Linked ELFs often have sh_addr==0 in .text; map via the owning PT_LOAD segment.
+    if (out.code_size > 0 && out.code_addr == 0 && text_sh) {
+        for (uint16_t i = 0; i < eh->e_phnum; ++i) {
+            if (ph[i].p_type != kPtLoad) continue;
+            const uint64_t seg_off = ph[i].p_offset;
+            const uint64_t seg_end = seg_off + ph[i].p_filesz;
+            if (text_sh->sh_offset >= seg_off && text_sh->sh_offset + text_sh->sh_size <= seg_end) {
+                out.code_addr = ph[i].p_vaddr + (text_sh->sh_offset - seg_off);
+                break;
+            }
+        }
+    }
+
+    if (out.code_size == 0 || out.code_addr == 0) {
         for (uint16_t i = 0; i < eh->e_phnum; ++i) {
             if (ph[i].p_type == kPtLoad && (ph[i].p_flags & kPfX)) {
                 out.code_addr = ph[i].p_vaddr;

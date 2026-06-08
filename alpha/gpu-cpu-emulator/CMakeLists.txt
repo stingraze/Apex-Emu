@@ -76,6 +76,8 @@ set(SIMPLE_OBJ ${CMAKE_BINARY_DIR}/guest/simple.o)
 set(PARALLEL_OBJ ${CMAKE_BINARY_DIR}/guest/parallel.o)
 set(PRINTLN_OBJ ${CMAKE_BINARY_DIR}/guest/println.o)
 set(DEMO_OBJ ${CMAKE_BINARY_DIR}/guest/demo.o)
+set(GPUBENCH_OBJ ${CMAKE_BINARY_DIR}/guest/gpubench.o)
+set(MANDEL_OBJ ${CMAKE_BINARY_DIR}/guest/mandel.o)
 
 if(GCC_EXECUTABLE)
     add_custom_command(
@@ -103,6 +105,14 @@ if(GCC_EXECUTABLE)
         COMMENT "Compiling guest/println.c to println.o"
     )
     add_custom_command(
+        OUTPUT ${MANDEL_OBJ}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/guest
+        COMMAND ${GCC_EXECUTABLE} -c ${GUEST_CFLAGS}
+                ${CMAKE_SOURCE_DIR}/guest/mandel.c -o ${MANDEL_OBJ}
+        DEPENDS ${CMAKE_SOURCE_DIR}/guest/mandel.c
+        COMMENT "Compiling guest/mandel.c to mandel.o"
+    )
+    add_custom_command(
         OUTPUT ${DEMO_OBJ}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/guest
         COMMAND ${GCC_EXECUTABLE} -c ${GUEST_CFLAGS}
@@ -110,7 +120,19 @@ if(GCC_EXECUTABLE)
         DEPENDS ${CMAKE_SOURCE_DIR}/guest/demo.c
         COMMENT "Compiling guest/demo.c to demo.o"
     )
-    add_custom_target(guest_objects ALL DEPENDS ${SIMPLE_OBJ} ${PARALLEL_OBJ} ${PRINTLN_OBJ} ${DEMO_OBJ})
+    set(GUEST_OBJ_LIST ${SIMPLE_OBJ} ${PARALLEL_OBJ} ${PRINTLN_OBJ} ${MANDEL_OBJ} ${DEMO_OBJ})
+    if(GAS_EXECUTABLE)
+        add_custom_command(
+            OUTPUT ${GPUBENCH_OBJ}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/guest
+            COMMAND ${GAS_EXECUTABLE} -64 ${CMAKE_SOURCE_DIR}/guest/gpubench.S
+                    -o ${GPUBENCH_OBJ}
+            DEPENDS ${CMAKE_SOURCE_DIR}/guest/gpubench.S
+            COMMENT "Assembling guest/gpubench.S to gpubench.o"
+        )
+        list(APPEND GUEST_OBJ_LIST ${GPUBENCH_OBJ})
+    endif()
+    add_custom_target(guest_objects ALL DEPENDS ${GUEST_OBJ_LIST})
 endif()
 
 if(GAS_EXECUTABLE AND LD_EXECUTABLE)
@@ -147,6 +169,8 @@ endif()
 if(TARGET guest_objects)
     add_dependencies(gpuemu guest_objects)
     target_compile_definitions(gpuemu PRIVATE SIMPLE_OBJ_DEFAULT="${PRINTLN_OBJ}")
+    target_compile_definitions(gpuemu PRIVATE GPUBENCH_OBJ_DEFAULT="${GPUBENCH_OBJ}")
+    target_compile_definitions(gpuemu PRIVATE MANDEL_OBJ_DEFAULT="${MANDEL_OBJ}")
 endif()
 
 # Allow CPU executor to include the CUDA header without nvcc

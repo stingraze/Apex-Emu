@@ -29,6 +29,8 @@ enum class Opcode : uint8_t {
     Leave,        // mov rsp, rbp; pop rbp
     Hlt,
     Syscall,
+    ImulReg,
+    ShiftRegImm,
     Barrier,      // sync point for parallel translation chunks
 };
 

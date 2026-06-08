@@ -14,6 +14,7 @@ int gpuemu_cuda_set_pc(void* h, uint32_t idx, uint32_t pc);
 int gpuemu_cuda_run(void* h, uint32_t steps);
 int gpuemu_cuda_download(void* h, uint32_t idx, x86::CpuState* cpu, uint8_t* mem);
 void gpuemu_cuda_destroy(void* h);
+const char* gpuemu_cuda_device_name();
 }
 #endif
 
@@ -99,18 +100,47 @@ void Emulator::translate(uint64_t entry_pc) {
     flat_ = flatten_ir(tu);
     translated_ = true;
 
+    if (flat_.code.empty()) {
+        std::cerr << "Translation failed: no IR ops (code_addr=0x" << std::hex << code_base_
+                  << " code_size=" << std::dec << code_size_ << ")\n";
+    }
+
 #ifdef GPUEMU_CUDA
-    if (use_gpu_ && !flat_.code.empty()) {
-        if (cuda_handle_) gpuemu_cuda_destroy(cuda_handle_);
-        cuda_handle_ = gpuemu_cuda_create(
-            static_cast<uint32_t>(vcpus_.size()),
-            mem_.size(),
-            flat_.code.data(),
-            static_cast<uint32_t>(flat_.code.size()));
-        if (!cuda_handle_) use_gpu_ = false;
+    if (cuda_handle_) {
+        gpuemu_cuda_destroy(cuda_handle_);
+        cuda_handle_ = nullptr;
     }
 #else
     (void)cuda_handle_;
+#endif
+}
+
+bool Emulator::init_gpu_backend() {
+    return init_gpu();
+}
+
+bool Emulator::init_gpu() {
+#ifdef GPUEMU_CUDA
+    if (!use_gpu_ || flat_.code.empty() || vcpus_.empty()) {
+        return false;
+    }
+    if (cuda_handle_) {
+        gpuemu_cuda_destroy(cuda_handle_);
+        cuda_handle_ = nullptr;
+    }
+    cuda_handle_ = gpuemu_cuda_create(
+        static_cast<uint32_t>(vcpus_.size()),
+        mem_.size(),
+        flat_.code.data(),
+        static_cast<uint32_t>(flat_.code.size()));
+    if (!cuda_handle_) {
+        std::cerr << "CUDA executor init failed; using CPU fallback\n";
+        use_gpu_ = false;
+        return false;
+    }
+    return true;
+#else
+    return false;
 #endif
 }
 
@@ -128,7 +158,11 @@ RunResult Emulator::run(uint32_t max_steps_per_vcpu) {
         return result;
     }
 
-    if (use_gpu_) {
+    if (use_gpu_ && !cuda_handle_) {
+        init_gpu();
+    }
+    const bool on_gpu = use_gpu_ && cuda_handle_ != nullptr;
+    if (on_gpu) {
         run_gpu(max_steps_per_vcpu);
     } else {
         run_cpu(max_steps_per_vcpu);
@@ -148,9 +182,24 @@ RunResult Emulator::run(uint32_t max_steps_per_vcpu) {
     return result;
 }
 
+const uint8_t* Emulator::vcpu_memory(uint32_t idx) const {
+    if (idx >= vcpu_mem_.size()) {
+        return mem_.host_ptr();
+    }
+    return vcpu_mem_[idx].data();
+}
+
 void Emulator::run_cpu(uint32_t max_steps) {
-    std::vector<uint32_t> pcs(vcpus_.size());
-    for (size_t i = 0; i < vcpus_.size(); ++i) {
+    const uint32_t n = static_cast<uint32_t>(vcpus_.size());
+    const uint64_t slice = mem_.size();
+    std::vector<std::vector<uint8_t>> mem_slices(n);
+    for (uint32_t i = 0; i < n; ++i) {
+        mem_slices[i].resize(slice);
+        std::memcpy(mem_slices[i].data(), mem_.host_ptr(), slice);
+    }
+
+    std::vector<uint32_t> pcs(n);
+    for (uint32_t i = 0; i < n; ++i) {
         pcs[i] = flat_.ir_index_for(vcpus_[i]->state().rip);
     }
     const uint32_t chunk = 4096;
@@ -158,13 +207,13 @@ void Emulator::run_cpu(uint32_t max_steps) {
 
     while (total < max_steps) {
         bool any_running = false;
-        for (size_t i = 0; i < vcpus_.size(); ++i) {
+        for (uint32_t i = 0; i < n; ++i) {
             auto& cpu = vcpus_[i]->state();
             if (cpu.halt) continue;
             any_running = true;
 
             const int st = cpuexec::run_ir(
-                cpu, mem_.host_ptr(), mem_.size(),
+                cpu, mem_slices[i].data(), slice,
                 flat_.code.data(), static_cast<uint32_t>(flat_.code.size()),
                 pcs[i], chunk);
 
@@ -176,6 +225,8 @@ void Emulator::run_cpu(uint32_t max_steps) {
         total += chunk;
         if (!any_running) break;
     }
+
+    vcpu_mem_ = std::move(mem_slices);
 }
 
 void Emulator::run_gpu(uint32_t max_steps) {
@@ -210,6 +261,13 @@ void Emulator::run_gpu(uint32_t max_steps) {
         }
         total += chunk;
         if (!any_running) break;
+    }
+
+    vcpu_mem_.resize(vcpus_.size());
+    for (size_t i = 0; i < vcpus_.size(); ++i) {
+        vcpu_mem_[i].resize(mem_.size());
+        gpuemu_cuda_download(cuda_handle_, static_cast<uint32_t>(i),
+                             &vcpus_[i]->state(), vcpu_mem_[i].data());
     }
 #else
     run_cpu(max_steps);
