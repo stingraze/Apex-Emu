@@ -131,7 +131,11 @@ Done.Done.Done.Done.Done.Done.Done.Done.
 --- 8 guest(s) finished (exit_code=42, halted=1) ---
 
 ```
-
+### Run the Mandelbrot vCPU demo (up to 32vCPU
+```
+cmake -S . -B build && cmake --build build -j
+./build/gpuemu --mandel -p 8
+```
 
 ### Run the Linux / BusyBox demo
 
