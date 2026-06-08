@@ -58,6 +58,7 @@ cmake --build . -j
 
 Without CUDA, the emulator runs on CPU using the same IR interpreter.
 
+<<<<<<< Updated upstream
 8 vCPU test (from ~/alpha/gpu-cpu-emulator):
 ```
 ./build/gpuemu -p 8 guest/parallel.o
@@ -137,6 +138,8 @@ cmake -S . -B build && cmake --build build -j
 ./build/gpuemu --mandel -p 8
 ```
 
+=======
+>>>>>>> Stashed changes
 ### Run the Linux / BusyBox demo
 
 ```bash
