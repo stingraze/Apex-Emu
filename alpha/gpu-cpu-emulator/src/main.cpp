@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <string>
 
 #ifdef GPUEMU_CUDA
@@ -49,10 +50,15 @@ static uint64_t sum_exit_codes(gpuemu::Emulator& emu) {
     return total;
 }
 
+static bool guest_obj_exists(const char* path) {
+    std::ifstream f(path, std::ios::binary);
+    return f.good();
+}
+
 static bool setup_mandel_emulator(gpuemu::Emulator& emu, const char* obj_path, uint32_t num_vcpus,
                                   uint32_t rows_per, uint64_t& entry_out) {
     if (!emu.load_guest(obj_path, entry_out)) {
-        fprintf(stderr, "Failed to load guest .o file.\n");
+        fprintf(stderr, "Failed to load Mandelbrot guest: %s\n", obj_path);
         return false;
     }
     for (uint32_t i = 0; i < num_vcpus; ++i) {
@@ -93,6 +99,14 @@ static void print_mandel_framebuffer(const gpuemu::Emulator& emu, uint32_t rows_
 }
 
 static void run_mandel(const char* obj_path, uint32_t num_vcpus, uint32_t max_steps) {
+    if (!guest_obj_exists(obj_path)) {
+        fprintf(stderr,
+                "Mandelbrot guest not found: %s\n"
+                "Build it first:  cmake -S . -B build && cmake --build build\n",
+                obj_path);
+        return;
+    }
+
     if (kMandelHeight % num_vcpus != 0) {
         fprintf(stderr,
                 "Mandelbrot height %u must be divisible by vCPU count %u "
@@ -296,9 +310,9 @@ static void print_usage(const char* prog) {
     printf("  %s [options] [path/to/guest.o]\n\n", prog);
     printf("Options:\n");
     printf("  --bench              Run CPU vs GPU showcase (default guest: gpubench.o)\n");
-    printf("  --mandel             Parallel ASCII Mandelbrot (default guest: mandel.o)\n");
+    printf("  --mandel             Parallel ASCII Mandelbrot (uses build/guest/mandel.o)\n");
     printf("  -p N, --parallel N   Run N vCPUs in parallel (default: 1, bench: 512, mandel: 8)\n");
-    printf("  --steps N            Max IR steps per vCPU in bench mode (default: 64M)\n");
+    printf("  --steps N            Max IR steps per vCPU (mandel default: 256M)\n");
     printf("  -h, --help           Show this help\n\n");
     printf("Showcase (needs CUDA GPU):\n");
     printf("  %s --bench -p 1024\n", prog);
@@ -359,6 +373,12 @@ int main(int argc, char** argv) {
         if (argv[i][0] == '-') {
             fprintf(stderr, "Unknown option: %s\n", argv[i]);
             return 1;
+        }
+        if (mandel_mode || bench_mode) {
+            fprintf(stderr,
+                    "Warning: ignoring guest path '%s' (--mandel/--bench supply their own guest)\n",
+                    argv[i]);
+            continue;
         }
         obj = argv[i];
     }

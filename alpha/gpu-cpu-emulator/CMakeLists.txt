@@ -133,6 +133,8 @@ if(GCC_EXECUTABLE)
         list(APPEND GUEST_OBJ_LIST ${GPUBENCH_OBJ})
     endif()
     add_custom_target(guest_objects ALL DEPENDS ${GUEST_OBJ_LIST})
+else()
+    message(WARNING "gcc not found; C guests (mandel.o, println.o, etc.) will not be built")
 endif()
 
 if(GAS_EXECUTABLE AND LD_EXECUTABLE)
